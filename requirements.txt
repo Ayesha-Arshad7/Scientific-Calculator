@@ -1,6 +1,7 @@
-streamlit==1.38.0
-sympy==1.13.2
-numpy==2.1.1
-pandas==2.2.2
-matplotlib==3.9.2
+streamlit
+sympy
+numpy
+pandas
+matplotlib
+
 
