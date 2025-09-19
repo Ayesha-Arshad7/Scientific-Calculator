@@ -22,8 +22,8 @@ if "history" not in st.session_state:
     st.session_state.history = []  # list of dicts: {"expr":..., "result":...}
 if "angle_mode" not in st.session_state:
     st.session_state.angle_mode = "RAD"  # or "DEG"
-if "input_updated" not in st.session_state:
-    st.session_state.input_updated = False
+if "button_clicked" not in st.session_state:
+    st.session_state.button_clicked = None
 
 # ---------- Angle Mode ----------
 col_mode1, col_mode2 = st.columns([1, 3])
@@ -177,73 +177,88 @@ display_input = st.text_input("Expression", value=st.session_state.display,
 if display_input != st.session_state.display:
     st.session_state.display = display_input
 
+# Process button clicks
+if st.session_state.button_clicked:
+    button_action = st.session_state.button_clicked
+    if button_action == "backspace":
+        st.session_state.display = st.session_state.display[:-1]
+    elif button_action == "clear_all":
+        st.session_state.display = ""
+    elif button_action == "set_ans":
+        st.session_state.display += "Ans"
+    elif button_action == "mem_recall":
+        st.session_state.display += str(st.session_state.memory)
+    elif button_action == "mem_clear":
+        st.session_state.memory = 0.0
+    elif button_action == "mem_plus":
+        try:
+            val = float(evaluate(st.session_state.display))
+            st.session_state.memory += val
+        except Exception:
+            st.warning("Cannot M+ current expression.")
+    elif button_action == "mem_minus":
+        try:
+            val = float(evaluate(st.session_state.display))
+            st.session_state.memory -= val
+        except Exception:
+            st.warning("Cannot M- current expression.")
+    elif button_action == "equals":
+        expr = st.session_state.display.strip()
+        res = evaluate(expr)
+        out = show_result(res)
+        if not isinstance(res, str):
+            st.session_state.ans = out
+            push_history(expr, out)
+    elif button_action == "sign_change":
+        if st.session_state.display.startswith("-"):
+            st.session_state.display = st.session_state.display[1:]
+        else:
+            st.session_state.display = "-" + st.session_state.display
+    else:
+        # Regular button that adds text
+        if button_action == "div": 
+            st.session_state.display += "/"
+        elif button_action == "mult": 
+            st.session_state.display += "*"
+        elif button_action == "pi": 
+            st.session_state.display += "pi"
+        elif button_action == "square": 
+            st.session_state.display += "^2"
+        elif button_action == "factorial": 
+            st.session_state.display += "!"
+        else:
+            st.session_state.display += button_action
+    
+    # Reset the button click
+    st.session_state.button_clicked = None
+    st.rerun()
+
 # Buttons grid
-def add(txt): 
-    st.session_state.display += txt
-    st.session_state.input_updated = True
-
-def backspace():
-    st.session_state.display = st.session_state.display[:-1]
-    st.session_state.input_updated = True
-
-def clear_all():
-    st.session_state.display = ""
-    st.session_state.input_updated = True
-
-def set_ans():
-    add("Ans")
-
-def equals():
-    expr = st.session_state.display.strip()
-    res = evaluate(expr)
-    out = show_result(res)
-    if not isinstance(res, str):
-        st.session_state.ans = out
-        push_history(expr, out)
-
-def mem_clear():
-    st.session_state.memory = 0.0
-
-def mem_recall():
-    add(str(st.session_state.memory))
-
-def mem_plus():
-    try:
-        val = float(evaluate(st.session_state.display))
-        st.session_state.memory += val
-    except Exception:
-        st.warning("Cannot M+ current expression.")
-
-def mem_minus():
-    try:
-        val = float(evaluate(st.session_state.display))
-        st.session_state.memory -= val
-    except Exception:
-        st.warning("Cannot M- current expression.")
+def create_button_callback(action):
+    def callback():
+        st.session_state.button_clicked = action
+    return callback
 
 # Row 1: Memory + utility
 r1 = st.columns(6)
-for idx, (label, fn) in enumerate([
-    ("MC", mem_clear), ("MR", mem_recall), ("M+", mem_plus),
-    ("M-", mem_minus), ("Ans", set_ans), ("C", clear_all)
+for idx, (label, action) in enumerate([
+    ("MC", "mem_clear"), ("MR", "mem_recall"), ("M+", "mem_plus"),
+    ("M-", "mem_minus"), ("Ans", "set_ans"), ("C", "clear_all")
 ]):
-    if r1[idx].button(label):
-        fn()
+    if r1[idx].button(label, on_click=create_button_callback(action)):
+        pass
 
 # Row 2: trig/log
 r2 = st.columns(7)
 for idx, token in enumerate(["sin(", "cos(", "tan(", "asin(", "acos(", "atan(", "ln("]):
-    if r2[idx].button(token):
-        add(token)
+    if r2[idx].button(token, on_click=create_button_callback(token)):
+        pass
 
 # Row 3: more funcs
 r3 = st.columns(7)
-for idx, token in enumerate(["log10(", "sqrt(", "(", ")", "^", "!", "%"]):
-    if r3[idx].button(token):
-        if token == "!":
-            add("!")
-        else:
-            add(token)
+for idx, token in enumerate(["log10(", "sqrt(", "(", ")", "^", "factorial", "%"]):
+    if r3[idx].button(token, on_click=create_button_callback(token)):
+        pass
 
 # Row 4-6: digits and ops
 rows = [
@@ -254,36 +269,37 @@ rows = [
 for row in rows:
     cols = st.columns(7)
     for i, key in enumerate(row):
-        if cols[i].button(key):
-            if key == "÷": add("/")
-            elif key == "×": add("*")
-            elif key == "π": add("pi")
-            elif key == "^2": add("^2")
-            elif key == "±":
-                if st.session_state.display.startswith("-"):
-                    st.session_state.display = st.session_state.display[1:]
-                else:
-                    st.session_state.display = "-" + st.session_state.display
-                st.session_state.input_updated = True
-            elif key == "⌫":
-                backspace()
-            else:
-                add(key)
+        if key == "÷":
+            if cols[i].button(key, on_click=create_button_callback("div")):
+                pass
+        elif key == "×":
+            if cols[i].button(key, on_click=create_button_callback("mult")):
+                pass
+        elif key == "π":
+            if cols[i].button(key, on_click=create_button_callback("pi")):
+                pass
+        elif key == "^2":
+            if cols[i].button(key, on_click=create_button_callback("square")):
+                pass
+        elif key == "±":
+            if cols[i].button(key, on_click=create_button_callback("sign_change")):
+                pass
+        elif key == "⌫":
+            if cols[i].button(key, on_click=create_button_callback("backspace")):
+                pass
+        else:
+            if cols[i].button(key, on_click=create_button_callback(key)):
+                pass
 
 # Equals row
 eq_col1, eq_col2 = st.columns([3, 1])
 with eq_col2:
-    if st.button("="):
-        equals()
+    if st.button("=", on_click=create_button_callback("equals")):
+        pass
 
 # Quick tips
 with eq_col1:
     st.info("Tips: `^` is power, `!` is factorial, `%` is percent, `Ans` is last result, use `x` to enable plotting.")
-
-# Force rerun if input was updated by buttons
-if st.session_state.input_updated:
-    st.session_state.input_updated = False
-    st.rerun()
 
 # ---------- History ----------
 st.subheader("History")
